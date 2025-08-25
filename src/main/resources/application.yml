@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: DATN
+  datasource:
+    url: jdbc:mysql://localhost:3306/thueTro
+    username: spring
+    password: spring
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: anhdz0809@gmail.com
+    password: eaipjwfvbiwqtwxr
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+cloudinary:
+  cloud_name: CLOUD_NAME
+  api_key: API_KEY
+  api_secret: API_SECRET
+
+app:
+  jwt:
+    # openssl rand -base64 64
+    secret: "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
+    expiration-ms: 604800000
