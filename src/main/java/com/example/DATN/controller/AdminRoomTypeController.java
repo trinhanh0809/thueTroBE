@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/admin/room-types") // đã được SecurityConfig chặn: chỉ ADMIN truy cập
+@RequestMapping("/room-types") // đã được SecurityConfig chặn: chỉ ADMIN truy cập
 public class AdminRoomTypeController {
 
     private final RoomTypeRepository repo;

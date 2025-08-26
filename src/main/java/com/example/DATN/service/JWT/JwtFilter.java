@@ -18,6 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -31,6 +32,7 @@ public class JwtFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain)
             throws ServletException, IOException {
+
 
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
@@ -81,4 +83,9 @@ public class JwtFilter extends OncePerRequestFilter {
                 || p.startsWith("/v3/api-docs")
                 || p.startsWith("/swagger-ui");
     }
+    private static final Set<String> WHITELIST = Set.of(
+            "/user/register", "/auth/login"   // hoặc "/api/user/register"
+    );
+
+
 }

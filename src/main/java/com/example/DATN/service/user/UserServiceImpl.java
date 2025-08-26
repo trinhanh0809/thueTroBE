@@ -34,7 +34,6 @@ public class UserServiceImpl implements UserService {
 
         // lấy role CUSTOMER (nhớ seed trước: ADMIN/CUSTOMER/HOST)
         Role customer = roleRepo.findByNameRole("CUSTOMER");
-        if (customer == null) throw new IllegalStateException("ROLE CUSTOMER chưa được khởi tạo");
 
         // build entity
         User u = new User();

@@ -74,10 +74,10 @@ public class UserController {
         u.setPassword(passwordEncoder.encode(req.password()));
         u.setEmail(req.email());
         u.setFirstName(req.firstName());
-        u.setLastName(req.lastName());
-        u.setPhoneNumber(req.phoneNumber());
+//        u.setLastName(req.lastName());
+//        u.setPhoneNumber(req.phoneNumber());
         u.setAvatar("");
-        u.setEnabled(false); // cần kích hoạt email
+        u.setEnabled(true); // cần kích hoạt email
         u.setHost(false);
         u.setActivationCode(java.util.UUID.randomUUID().toString());
         u.setListRoles(java.util.List.of(customer));

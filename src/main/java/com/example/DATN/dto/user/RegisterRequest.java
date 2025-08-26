@@ -9,7 +9,7 @@ public record RegisterRequest(
         @NotBlank @Size(min = 6, max = 128) String password,
         @NotBlank @Email String email,
         String firstName,
-        String lastName,
-        String phoneNumber,
+//        String lastName,
+//        String phoneNumber,
         boolean applyHost
 ) {}
