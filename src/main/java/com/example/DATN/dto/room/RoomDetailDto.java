@@ -17,10 +17,24 @@ public record RoomDetailDto(
         String status,
         Double lat,
         Double lng,
-        RoomTypeDto roomType,
-        List<String> amenities,     // tên tiện ích
-        List<String> imageUrls,     // url ảnh
-        String wardName,
-        String districtName,
-        String provinceName
+
+        // room type (đúng kiểu)
+        Long roomTypeId,
+        String roomTypeName,
+
+        // block
+        Long blockId,
+
+        // amenities
+        List<Long> amenityIds,
+
+        // images
+        List<String> imageUrls,
+
+        // location
+        Long wardId,
+        Long districtId,
+        Long provinceId,
+
+        ContactDto contact
 ) {}

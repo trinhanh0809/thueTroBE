@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface RoomImageRepository extends JpaRepository<RoomImage, Long> {
     List<RoomImage> findByRoom_IdOrderBySortOrderAsc(Long roomId);
+    void deleteByRoom_Id(Long roomId);
 }

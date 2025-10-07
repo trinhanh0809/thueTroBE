@@ -2,7 +2,7 @@ spring:
   application:
     name: DATN
   datasource:
-    url: jdbc:mysql://localhost:3306/thueTro
+    url: jdbc:mysql://localhost:3306/thueTro?useSSL=false&serverTimezone=UTC
     username: spring
     password: spring
   jpa:
@@ -13,7 +13,7 @@ spring:
     host: smtp.gmail.com
     port: 587
     username: anhdz0809@gmail.com
-    password: eaipjwfvbiwqtwxr
+    password: eaipjwfvbiwqtwxr     # (khuyên: đưa vào ENV, đừng commit)
     properties:
       mail:
         smtp:
@@ -22,12 +22,19 @@ spring:
             enable: true
 
 cloudinary:
-  cloud_name: CLOUD_NAME
-  api_key: API_KEY
-  api_secret: API_SECRET
+  cloud-name: dz4cc9vst
+  api-key: "522694251414567"
+  api-secret: "-K9a9VXFV-lYB8N2Y07m-XzFQmg"  # (khuyên: ENV)
 
 app:
   jwt:
-    # openssl rand -base64 64
     secret: "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
     expiration-ms: 604800000
+
+logging:
+  level:
+    root: INFO
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE

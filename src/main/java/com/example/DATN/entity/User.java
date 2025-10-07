@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Getter @Setter @NoArgsConstructor
@@ -42,5 +43,10 @@ public class User {
             joinColumns = @JoinColumn(name = "id_user"),
             inverseJoinColumns = @JoinColumn(name = "id_role"))
     private List<Role> listRoles;
+    public void setListRoles(List<Role> roles) {
+        if (this.listRoles == null) this.listRoles = new ArrayList<>();
+        this.listRoles.clear();                 // giữ nguyên instance do Hibernate quản lý
+        if (roles != null) this.listRoles.addAll(roles); // copy vào list mutable nội bộ
+    }
 }
 

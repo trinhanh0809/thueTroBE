@@ -16,10 +16,16 @@ public class CloudinaryConfig {
             @Value("${cloudinary.api-key}") String apiKey,
             @Value("${cloudinary.api-secret}") String apiSecret
     ){
+        if (cloudName == null || cloudName.isBlank()
+                || apiKey == null || apiKey.isBlank()
+                || apiSecret == null || apiSecret.isBlank()) {
+            throw new IllegalStateException("Missing Cloudinary configs");
+        }
         return new Cloudinary(Map.of(
                 "cloud_name", cloudName,
                 "api_key", apiKey,
-                "api_secret", apiSecret
+                "api_secret", apiSecret,
+                "secure", "true"
         ));
     }
 }

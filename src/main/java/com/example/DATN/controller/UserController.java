@@ -16,7 +16,12 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -25,10 +30,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Function;
 
 @RestController
 @RequestMapping("/user")
@@ -50,7 +53,166 @@ public class UserController {
     @Value("${app.admin.emails:}")
     private String adminEmailsCsv;
 
-    /* ========== AUTH ========== */
+    /* ======================= HELPERS DÙNG CHUNG ======================= */
+
+    private static String str(Object v) { return v == null ? null : v.toString(); }
+    private static String orEmpty(String s) { return s == null ? "" : s; }
+    private static Boolean toBool(Object v) {
+        if (v == null) return null;
+        if (v instanceof Boolean b) return b;
+        return Boolean.parseBoolean(v.toString());
+    }
+
+    /** Áp dụng các trường profile cơ bản (firstName, lastName, phoneNumber, avatar) */
+    private void applyBasicProfile(User u, Map<String, ?> body) {
+        if (body.containsKey("firstName"))   u.setFirstName(str(body.get("firstName")));
+        if (body.containsKey("lastName"))    u.setLastName(str(body.get("lastName")));
+        if (body.containsKey("phoneNumber")) u.setPhoneNumber(str(body.get("phoneNumber")));
+        if (body.containsKey("avatar"))      u.setAvatar(str(body.get("avatar")));
+    }
+
+    /** Convert User -> Map JSON (an toàn null, giữ thứ tự field) */
+    private Map<String, Object> toUserJson(User u) {
+        var roles = (u.getListRoles() == null ? Collections.<Role>emptyList() : u.getListRoles())
+                .stream().map(Role::getNameRole).filter(Objects::nonNull).toList();
+
+        var m = new LinkedHashMap<String, Object>();
+        m.put("id", u.getIdUser());
+        m.put("username", orEmpty(u.getUsername()));
+        m.put("firstName", orEmpty(u.getFirstName()));
+        m.put("lastName", orEmpty(u.getLastName()));
+        m.put("email", orEmpty(u.getEmail()));
+        m.put("phoneNumber", orEmpty(u.getPhoneNumber()));
+        m.put("avatar", orEmpty(u.getAvatar()));
+        m.put("enabled", u.isEnabled());
+        m.put("isHost", u.isHost());
+        m.put("roles", roles);
+        return m;
+    }
+
+    private static String url(String s) {
+        try {
+            return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return s;
+        }
+    }
+
+    /* ============================ USERS (ADMIN) ============================ */
+
+    /** Lấy tất cả tài khoản (ADMIN) */
+    @GetMapping("/all")
+    public ResponseEntity<?> getAllUsers() {
+        List<User> users = userRepo.findAll();
+        List<Map<String, Object>> result = users.stream().map(this::toUserJson).toList();
+        return ResponseEntity.ok(result);
+    }
+
+    /** Cập nhật một phần user (ADMIN) */
+    @PatchMapping("/{id}")
+    public ResponseEntity<?> adminUpdateUser(
+            @PathVariable Integer id,
+            @RequestBody Map<String, Object> body
+    ) {
+        var uOpt = userRepo.findById(id);
+        if (uOpt.isEmpty()) return ResponseEntity.status(404).body("Không tìm thấy người dùng");
+        var u = uOpt.get();
+
+        // Dùng lại phần profile cơ bản
+        applyBasicProfile(u, body);
+
+        // email
+        if (body.containsKey("email")) {
+            String newEmail = str(body.get("email"));
+            if (newEmail != null && !newEmail.equals(u.getEmail())
+                    && userRepo.findByEmail(newEmail).isPresent()) {
+                return ResponseEntity.badRequest().body("Email đã tồn tại");
+            }
+            if (newEmail != null && !newEmail.isBlank()) u.setEmail(newEmail);
+        }
+
+        // username
+        if (body.containsKey("username")) {
+            String newUsername = str(body.get("username"));
+            if (newUsername != null && !newUsername.equals(u.getUsername())
+                    && userRepo.findByUsername(newUsername).isPresent()) {
+                return ResponseEntity.badRequest().body("Username đã tồn tại");
+            }
+            if (newUsername != null && !newUsername.isBlank()) u.setUsername(newUsername);
+        }
+
+        // enabled
+        if (body.containsKey("enabled")) {
+            Boolean val = toBool(body.get("enabled"));
+            if (val != null) u.setEnabled(val);
+        }
+
+        // isHost
+        if (body.containsKey("isHost")) {
+            Boolean val = toBool(body.get("isHost"));
+            if (val != null) u.setHost(val);
+        }
+
+        // roles (nhận chuỗi đơn "ADMIN" hoặc mảng ["ADMIN","HOST"])
+        if (body.containsKey("roles")) {
+            Object rv = body.get("roles");
+            List<String> names;
+            if (rv instanceof List<?> list) {
+                names = list.stream().map(Object::toString).toList();
+            } else {
+                names = List.of(rv.toString());
+            }
+
+            // map tên -> Role entity (bỏ null), tạo list MUTABLE
+            ArrayList<Role> newRoles = names.stream()
+                    .map(roleRepo::findByNameRole)
+                    .filter(Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+            if (newRoles.isEmpty()) {
+                return ResponseEntity.badRequest().body("Danh sách roles không hợp lệ");
+            }
+
+            // Cập nhật IN-PLACE để tránh collection bất biến
+            if (u.getListRoles() == null) {
+                u.setListRoles(new ArrayList<>());
+            } else {
+                u.getListRoles().clear();
+            }
+            u.getListRoles().addAll(newRoles);
+        }
+
+        userRepo.save(u);
+        return ResponseEntity.ok(toUserJson(u));
+    }
+
+    /** Bật/tắt tài khoản (ADMIN) */
+    @PatchMapping("/{id}/toggle-enabled")
+    public ResponseEntity<?> toggleEnabled(
+            @PathVariable Integer id,
+            @AuthenticationPrincipal org.springframework.security.core.userdetails.User me
+    ) {
+        var opt = userRepo.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.status(404).body("Không tìm thấy người dùng");
+        var u = opt.get();
+
+        // khuyến nghị: chặn tự đổi trạng thái chính mình
+        if (me != null && me.getUsername().equals(u.getUsername())) {
+            return ResponseEntity.badRequest().body("Không thể tự thay đổi trạng thái tài khoản của chính mình");
+        }
+
+        boolean newVal = !u.isEnabled();
+        u.setEnabled(newVal);
+        userRepo.save(u);
+
+        return ResponseEntity.ok(Map.of(
+                "id", u.getIdUser(),
+                "enabled", u.isEnabled(),
+                "message", newVal ? "Đã bật tài khoản" : "Đã vô hiệu hoá tài khoản"
+        ));
+    }
+
+    /* ============================== AUTH ============================== */
 
     /** Đăng ký tài khoản (có thể kèm applyHost=true) */
     @PostMapping("/register")
@@ -68,22 +230,28 @@ public class UserController {
                     .body("ROLE CUSTOMER chưa được khởi tạo");
         }
 
-        // Tạo người dùng
         User u = new User();
         u.setUsername(req.username());
         u.setPassword(passwordEncoder.encode(req.password()));
         u.setEmail(req.email());
         u.setFirstName(req.firstName());
-//        u.setLastName(req.lastName());
-//        u.setPhoneNumber(req.phoneNumber());
         u.setAvatar("");
-        u.setEnabled(true); // cần kích hoạt email
-        u.setHost(false);
+
+        // Tuỳ bạn chọn flow kích hoạt email:
+        u.setEnabled(true); // nếu không cần kích hoạt email
+        // u.setEnabled(false); // nếu cần kích hoạt email
         u.setActivationCode(java.util.UUID.randomUUID().toString());
-        u.setListRoles(java.util.List.of(customer));
+
+        u.setHost(false);
+
+        // GÁN ROLES BẰNG LIST MUTABLE để tránh lỗi Hibernate
+        ArrayList<Role> initRoles = new ArrayList<>();
+        initRoles.add(customer);
+        u.setListRoles(initRoles);
+
         userRepo.save(u);
 
-        // Gửi email kích hoạt
+        // Email kích hoạt (nếu dùng flow kích hoạt)
         String activeLink = feBaseUrl + "/activate?email=" + url(u.getEmail()) + "&code=" + url(u.getActivationCode());
         mailService.sendHtml(
                 u.getEmail(),
@@ -96,14 +264,13 @@ public class UserController {
                 """.formatted(u.getUsername(), activeLink, activeLink)
         );
 
-        // Nếu user xin làm chủ trọ → tạo yêu cầu PENDING + bắn mail admin & user
+        // Nếu apply host → tạo request & gửi mail
         if (req.applyHost()) {
             HostRequest hr = new HostRequest();
             hr.setUser(u);
             hr.setStatus(HostRequestStatus.PENDING);
             hostRequestRepo.save(hr);
 
-            // mail admin
             List<String> admins = com.example.DATN.service.email.MailServiceImpl.parseEmails(adminEmailsCsv);
             if (!admins.isEmpty()) {
                 String link = feBaseUrl + "/admin/host-requests/" + hr.getId();
@@ -120,7 +287,6 @@ public class UserController {
                         """.formatted(u.getUsername(), u.getEmail(), hr.getId(), link, link)
                 );
             }
-            // mail user
             mailService.sendHtml(
                     u.getEmail(),
                     "[Thuê Trọ] Đã nhận yêu cầu làm chủ trọ",
@@ -158,32 +324,17 @@ public class UserController {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword())
             );
-
             if (!auth.isAuthenticated()) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Xác thực không thành công");
             }
 
-
-            // Lấy user + roles từ DB
             var u = userRepo.findByUsername(req.getUsername()).orElseThrow();
 
-            // roles KHÔNG prefix, ví dụ ["ADMIN","CUSTOMER"]
             var roles = u.getListRoles().stream()
                     .map(Role::getNameRole)
                     .toList();
 
-            // (tuỳ chọn) claim phụ cho FE
-            var extra = Map.of(
-                    "id", u.getIdUser(),
-                    "email", u.getEmail(),
-                    "firstName", u.getFirstName(),
-                    "lastName", u.getLastName()
-            );
-
-            // Phát hành JWT có roles
             String token = jwtService.generateToken(u.getUsername(), roles, null);
-
-            // Giữ field FE đang đọc: jwtToken
             return ResponseEntity.ok(new JwtResponse(token));
 
         } catch (BadCredentialsException e) {
@@ -193,8 +344,7 @@ public class UserController {
         }
     }
 
-
-    /* ========== ME / PROFILE ========== */
+    /* ============================ ME / PROFILE ============================ */
 
     /** Thông tin user hiện tại */
     @GetMapping("/me")
@@ -202,20 +352,8 @@ public class UserController {
         if (me == null) return ResponseEntity.status(401).body("Unauthorized");
         var u = userRepo.findByUsername(me.getUsername()).orElse(null);
         if (u == null) return ResponseEntity.status(404).body("Không tìm thấy người dùng");
-        return ResponseEntity.ok(Map.of(
-                "id", u.getIdUser(),
-                "username", u.getUsername(),
-                "email", u.getEmail(),
-                "firstName", u.getFirstName(),
-                "lastName", u.getLastName(),
-                "phoneNumber", u.getPhoneNumber(),
-                "avatar", u.getAvatar(),
-                "enabled", u.isEnabled(),
-                "isHost", u.isHost(),
-                "roles", u.getListRoles().stream().map(Role::getNameRole).toList()
-        ));
+        return ResponseEntity.ok(toUserJson(u));
     }
-
 
     /** Đổi mật khẩu */
     @PutMapping("/change-password")
@@ -271,16 +409,14 @@ public class UserController {
         return ResponseEntity.ok(Map.of("avatar", url));
     }
 
-    /** Cập nhật hồ sơ cơ bản */
+    /** Cập nhật hồ sơ cơ bản (user tự sửa) */
     @PutMapping("/update-profile")
     public ResponseEntity<?> updateProfile(
             @AuthenticationPrincipal org.springframework.security.core.userdetails.User me,
-            @RequestBody Map<String, String> body
+            @RequestBody Map<String, Object> body
     ) {
         var u = userRepo.findByUsername(me.getUsername()).orElseThrow();
-        if (body.containsKey("firstName")) u.setFirstName(body.get("firstName"));
-        if (body.containsKey("lastName"))  u.setLastName(body.get("lastName"));
-        if (body.containsKey("phoneNumber")) u.setPhoneNumber(body.get("phoneNumber"));
+        applyBasicProfile(u, body);
         userRepo.save(u);
         return ResponseEntity.ok("Cập nhật hồ sơ thành công");
     }
@@ -298,15 +434,31 @@ public class UserController {
         ));
     }
 
-    /* ========== helpers ========== */
-
-    private static String url(String s) {
-        try {
-            return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return s;
-        }
+    private <T, R> Map<String, Object> pageResponse(Page<T> p, Function<T, R> mapper) {
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("content", p.map(mapper).getContent());
+        res.put("totalPages", p.getTotalPages());
+        res.put("totalElements", p.getTotalElements());
+        res.put("pageNumber", p.getNumber());
+        res.put("pageSize", p.getSize());
+        return res;
     }
 
+    @GetMapping("/search")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> searchUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) Boolean isHost,
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "idUser") String sortBy,
+            @RequestParam(defaultValue = "DESC") Sort.Direction dir
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sortBy));
+        Page<User> p = userRepo.searchUsers(q, enabled, isHost, role, pageable);
+        return ResponseEntity.ok(pageResponse(p, this::toUserJson));
+    }
 
 }

@@ -63,7 +63,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, Endpoints.PUBLIC_PUT).permitAll()
                         .requestMatchers(HttpMethod.DELETE, Endpoints.PUBLIC_DELETE).permitAll()
 
-
+                        .requestMatchers("/files/images").authenticated()
                         // Role-based
                         .requestMatchers(Endpoints.ADMIN_ENDPOINT).hasRole("ADMIN")
                         .requestMatchers(Endpoints.HOST_ENDPOINT).hasAnyRole("ADMIN","HOST")
