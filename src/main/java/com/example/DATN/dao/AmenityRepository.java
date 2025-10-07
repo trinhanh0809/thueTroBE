@@ -7,5 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface AmenityRepository extends JpaRepository<Amenity, Long> {
-    List<Amenity> findByActiveTrueOrderBySortOrderAsc();
+    boolean existsByCode(String code);
+    boolean existsByCodeAndIdNot(String code, Long id);
 }

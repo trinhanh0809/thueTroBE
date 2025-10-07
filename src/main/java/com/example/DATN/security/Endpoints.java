@@ -51,7 +51,8 @@ public final class Endpoints {
     // Admin namespace: duyệt/từ chối phòng, quản trị danh mục…
     public static final String[] ADMIN_ENDPOINT = {
             "/admin/**",
-            "/admin/room-types"
+            "/admin/room-types",
+            "/admin/amenity",
     };
 
     // Host namespace: tạo/sửa phòng (đăng bài) – quyền HOST

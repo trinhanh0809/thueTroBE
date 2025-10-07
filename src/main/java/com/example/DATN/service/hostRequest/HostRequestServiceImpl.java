@@ -1,6 +1,5 @@
 package com.example.DATN.service.hostRequest;
 
-
 import com.example.DATN.dao.HostRequestRepository;
 import com.example.DATN.dao.RoleRepository;
 import com.example.DATN.dao.UserRepository;
@@ -9,12 +8,10 @@ import com.example.DATN.entity.Role;
 import com.example.DATN.entity.User;
 import com.example.DATN.enums.HostRequestStatus;
 import com.example.DATN.service.email.MailService;
+import com.example.DATN.service.hostRequest.HostRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.util.HashSet;
 
 @Service
 @RequiredArgsConstructor
@@ -38,37 +35,27 @@ public class HostRequestServiceImpl implements HostRequestService {
         }
 
         User user = hr.getUser();
-        // đảm bảo listRoles không null
-        if (user.getListRoles() == null) user.setListRoles(new java.util.ArrayList<>());
+        ensureRolesCollection(user);
 
-        // ensure ROLE_HOST tồn tại
-        Role hostRole = roleRepo.findByNameRole(ROLE_HOST);
-        if (hostRole == null) {
-            hostRole = new Role();
-            hostRole.setNameRole(ROLE_HOST);
-            hostRole = roleRepo.save(hostRole);
-        }
+        // Lấy/tạo ROLE_HOST
+        Role hostRole = getOrCreateRole(ROLE_HOST);
 
-        // thêm ROLE_HOST nếu chưa có
-        boolean hasHostRole = user.getListRoles().stream()
-                .anyMatch(r -> ROLE_HOST.equalsIgnoreCase(r.getNameRole()));
-        if (!hasHostRole) {
-            user.getListRoles().add(hostRole);
-        }
+        // Thêm ROLE_HOST nếu chưa có
+        addRoleIfMissing(user, hostRole);
 
-        // set host flag
+        // Bật cờ host (map tới cột id_host nếu bạn đang dùng)
         user.setHost(true);
         userRepo.save(user);
 
-        // cập nhật request
+        // Cập nhật request
         hr.setStatus(HostRequestStatus.APPROVED);
-//        hr.setReviewedAt(Instant.now());
         hr.setNote(note);
-        // nếu muốn set reviewedBy theo adminUsername thì load admin từ userRepo rồi set:
-//        userRepo.findByUsername(adminUsername).ifPresent(hr::setReviewedBy);
+        // Nếu có field reviewedBy / reviewedAt thì mở 2 dòng dưới
+        // hr.setReviewedBy(adminUsername);
+        // hr.setReviewedAt(Instant.now());
         hostRequestRepo.save(hr);
 
-        // email thông báo cho user
+        // Gửi mail
         mailService.sendHtml(
                 user.getEmail(),
                 "[Thuê Trọ] Yêu cầu làm chủ trọ đã được duyệt",
@@ -91,25 +78,24 @@ public class HostRequestServiceImpl implements HostRequestService {
         }
 
         User user = hr.getUser();
+        ensureRolesCollection(user);
 
-        // an toàn: bỏ quyền host nếu lỡ có và gỡ cờ isHost
-        if (user.getListRoles() != null) {
-            user.setListRoles(new java.util.ArrayList<>(
-                    new HashSet<>(user.getListRoles()) // tránh trùng
-            ));
-            user.getListRoles().removeIf(r -> ROLE_HOST.equalsIgnoreCase(r.getNameRole()));
-        }
+        // Bỏ ROLE_HOST nếu có
+        removeRoleByName(user, ROLE_HOST);
+
+        // Tắt cờ host (id_host = 0)
         user.setHost(false);
         userRepo.save(user);
 
+        // Cập nhật request
         hr.setStatus(HostRequestStatus.REJECTED);
-//        hr.setReviewedAt(Instant.now());
         hr.setNote(note);
-//        userRepo.findByUsername(adminUsername).ifPresent(hr::setReviewedBy);
+        // hr.setReviewedBy(adminUsername);
+        // hr.setReviewedAt(Instant.now());
         hostRequestRepo.save(hr);
 
-        // email thông báo cho user
-        String reason = (note == null || note.isBlank()) ? "" : ("<p>Lý do: " + note + "</p>");
+        // Gửi mail
+        String reasonHtml = (note == null || note.isBlank()) ? "" : ("<p>Lý do: " + note + "</p>");
         mailService.sendHtml(
                 user.getEmail(),
                 "[Thuê Trọ] Yêu cầu làm chủ trọ bị từ chối",
@@ -119,8 +105,36 @@ public class HostRequestServiceImpl implements HostRequestService {
                 %s
                 <p>Nếu có thắc mắc, vui lòng phản hồi email này.</p>
                 <p>Trân trọng,<br/>Thuê Trọ Team</p>
-                """.formatted(user.getUsername(), reason)
+                """.formatted(user.getUsername(), reasonHtml)
         );
     }
-}
 
+    /* ==================== Helpers ==================== */
+
+    private Role getOrCreateRole(String roleName) {
+        Role role = roleRepo.findByNameRole(roleName);
+        if (role != null) return role;
+        Role newRole = new Role();
+        newRole.setNameRole(roleName);
+        return roleRepo.save(newRole);
+    }
+
+    private void ensureRolesCollection(User user) {
+        if (user.getListRoles() == null) {
+            user.setListRoles(new java.util.ArrayList<>());
+        }
+    }
+
+    private void addRoleIfMissing(User user, Role role) {
+        boolean exists = user.getListRoles().stream()
+                .anyMatch(r -> r.getNameRole().equalsIgnoreCase(role.getNameRole()));
+        if (!exists) {
+            user.getListRoles().add(role);
+        }
+    }
+
+    private void removeRoleByName(User user, String roleName) {
+        if (user.getListRoles() == null) return;
+        user.getListRoles().removeIf(r -> roleName.equalsIgnoreCase(r.getNameRole()));
+    }
+}

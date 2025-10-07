@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record CreateRoomRequest(
+        Long blockId,
         Long roomTypeId,
         Long wardId,
         String addressLine,
