@@ -10,10 +10,10 @@ spring:
       ddl-auto: update
 
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: anhdz0809@gmail.com
-    password: eaipjwfvbiwqtwxr     # (khuyên: đưa vào ENV, đừng commit)
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -22,9 +22,9 @@ spring:
             enable: true
 
 cloudinary:
-  cloud-name: dz4cc9vst
-  api-key: "522694251414567"
-  api-secret: "-K9a9VXFV-lYB8N2Y07m-XzFQmg"  # (khuyên: ENV)
+  cloud-name: ${CLOUDINARY_NAME}
+  api-key: ${CLOUDINARY_KEY}
+  api-secret: ${CLOUDINARY_SECRET}
 
 app:
   jwt:
